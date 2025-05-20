@@ -35,5 +35,5 @@ jobs:
           az functionapp deployment source config-zip \
             --name TrinityPdfPipeline \
             --resource-group PdfPipelineRG \
-            --slot staging \
+            --slot  \
             --src function.zip
