@@ -32,8 +32,8 @@ jobs:
 
           zip -r function.zip .
 
-          az functionapp deployment source config-zip \
+            az functionapp deployment source config-zip \
             --name TrinityPdfPipeline \
             --resource-group PdfPipelineRG \
-            --slot  \
             --src function.zip
+         
