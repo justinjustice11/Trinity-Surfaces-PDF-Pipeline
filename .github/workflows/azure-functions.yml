@@ -2,7 +2,8 @@ name: Build & Deploy Azure Function
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build-and-deploy:
@@ -25,15 +26,20 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Zip & deploy to Staging slot
+      - name: Zip & deploy to Production slot
         run: |
           sudo apt-get update
           sudo apt-get install -y zip
 
-          zip -r function.zip .
+          # Package only your function app code, excluding Git, VSCode, venv, caches
+          zip -r function.zip . \
+            -x ".git/*" \
+            -x ".vscode/*" \
+            -x ".venv/*" \
+            -x "__pycache__/*"
 
-            az functionapp deployment source config-zip \
+          # Deploy the zip to your Function App (production)
+          az functionapp deployment source config-zip \
             --name TrinityPdfPipeline \
             --resource-group PdfPipelineRG \
             --src function.zip
-         
