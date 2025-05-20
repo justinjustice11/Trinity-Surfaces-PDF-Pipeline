@@ -30,4 +30,5 @@ jobs:
           az functionapp deploy \
             --name TrinityPdfPipeline \
             --resource-group PdfPipelineRG \
-            --src-path .
+            --src-path . \
+            --type script
