@@ -3,17 +3,37 @@
 # Add steps that build, run tests, deploy, and more:
 # https://aka.ms/yaml
 
+# Azure Pipelines YAML for Python 3.9 Azure Functions CI/CD
 trigger:
 - main
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: ubuntu-latest  # Use Ubuntu agent (required for Python on Linux):contentReference[oaicite:4]{index=4}
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+- checkout: self  # Check out source code
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+- task: UsePythonVersion@0
+  displayName: "Use Python 3.9"
+  inputs:
+    versionSpec: '3.9'    # Set Python version to 3.9:contentReference[oaicite:5]{index=5}
+    architecture: 'x64'
+
+- script: pip install -r requirements.txt
+  displayName: "Install dependencies"
+
+- task: FuncToolsInstaller@0
+  displayName: "Install Azure Functions Core Tools"
+  inputs:
+    version: 'latest'    # Install latest Core Tools (v4 for Azure Functions 4.x)
+
+- task: AzureCLI@2
+  displayName: "Deploy Azure Function"
+  inputs:
+    azureSubscription: 'pdfpripelinerg'   # Service connection name for Azure:contentReference[oaicite:6]{index=6}
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      # Use Azure Functions Core Tools to publish the function app with remote build
+      func azure functionapp publish TrinityPdfPipeline --build remote
+
