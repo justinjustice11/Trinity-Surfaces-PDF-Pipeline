@@ -22,7 +22,15 @@ jobs:
           pip install -r requirements.txt
 
       - name: Archive function app
-        run: zip -r function.zip . -x ".venv/*" "__pycache__/*"
+        run: |
+          # zip up everything except your virtual-env and caches
+          zip -r function.zip . -x ".venv/*" "__pycache__/*"
+          # verify it exists
+          echo "Contents of workspace:"
+          ls -lah
+          echo "ZIP file:"
+          ls -lah function.zip
+
 
       - name: Azure Login
         uses: azure/login@v1
@@ -30,7 +38,8 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy to Azure Functions
-        run: az functionapp deployment source config-zip \
-               --resource-group PdfPipelineRG \
-               --name TrinityPdfPipeline \
-               --src function.zip
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group PdfPipelineRG \
+            --name TrinityPdfPipeline \
+            --src function.zip
