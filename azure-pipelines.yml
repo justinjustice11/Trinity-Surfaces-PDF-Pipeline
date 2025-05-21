@@ -30,7 +30,7 @@ steps:
 - task: AzureCLI@2
   displayName: "Deploy Azure Function"
   inputs:
-    azureSubscription: 'pdfpripelinerg'   # Service connection name for Azure:contentReference[oaicite:6]{index=6}
+    azureSubscription: 'PdfPipelineRG-connection'   # Service connection name for Azure:contentReference[oaicite:6]{index=6}
     scriptType: bash
     scriptLocation: inlineScript
     inlineScript: |
