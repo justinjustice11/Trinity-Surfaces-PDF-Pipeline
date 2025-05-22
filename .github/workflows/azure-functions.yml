@@ -9,8 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -19,6 +18,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Login to Azure
@@ -26,13 +26,9 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Create zip package
-        run: |
-          zip -r function.zip host.json function_app.py requirements.txt
-
-      - name: Deploy to Azure Functions
-        run: |
-          az functionapp deployment source config-zip \
-            --name TrinityPdfPipeline \
-            --resource-group PdfPipelineRG \
-            --src function.zip
+      - name: Deploy Azure Function
+        uses: Azure/functions-action@v1
+        with:
+          app-name: TrinityPdfPipeline
+          package: '.'
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
