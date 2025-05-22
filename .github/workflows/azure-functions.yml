@@ -1,15 +1,16 @@
-name: CI/CD → Azure Functions
+name: Build & Deploy Azure Function
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -18,28 +19,20 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Archive function app
-        run: |
-          # zip up everything except your virtual-env and caches
-          zip -r function.zip . -x ".venv/*" "__pycache__/*"
-          # verify it exists
-          echo "Contents of workspace:"
-          ls -lah
-          echo "ZIP file:"
-          ls -lah function.zip
-
-
-      - name: Azure Login
+      - name: Login to Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Create zip package
+        run: |
+          zip -r function.zip host.json function_app.py requirements.txt
+
       - name: Deploy to Azure Functions
         run: |
           az functionapp deployment source config-zip \
-            --resource-group PdfPipelineRG \
             --name TrinityPdfPipeline \
+            --resource-group PdfPipelineRG \
             --src function.zip
