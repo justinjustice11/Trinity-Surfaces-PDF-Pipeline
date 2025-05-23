@@ -8,19 +8,23 @@ def main(inputBlob: func.InputStream, outputBlob: func.Out[str]) -> None:
     try:
         logging.info(f"Triggered by blob: {inputBlob.name}, size: {inputBlob.length} bytes")
 
-        # Read PDF data and extract text
+        # Read the PDF content
         pdf_data = inputBlob.read()
+
+        # Extract text from the PDF
         text = extract_text(io.BytesIO(pdf_data))
 
+        # Format result
         result = {
             "file": inputBlob.name,
             "size": inputBlob.length,
             "text": text
         }
 
-        # Write result as JSON
-        outputBlob.set(json.dumps(result, ensure_ascii=False))
-        logging.info(f"Wrote JSON to pdfjson/{inputBlob.name}.json")
+        # Write to output blob as JSON
+        outputBlob.set(json.dumps(result))
+        logging.info(f"Successfully wrote JSON for: {inputBlob.name}")
 
     except Exception as e:
-        logging.error(f"Failed to process blob {inputBlob.name}: {e}", exc_info=True)
+        logging.error(f"Error processing {inputBlob.name}: {str(e)}", exc_info=True)
+        raise  # re-throw so Azure Functions runtime knows it failed
