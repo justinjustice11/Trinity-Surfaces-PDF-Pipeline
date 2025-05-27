@@ -5,30 +5,25 @@ import re
 from pdfminer.high_level import extract_text
 import azure.functions as func
 
+# pre‐compile a regex that will catch any of the labels you care about
+_ORDER_RE = re.compile(
+    r'\b(?:Order\s*Number|Order\s*No|PO\s*Number|PO\s*No|SO\s*Number|SO\s*No)\s*[:#]?\s*([\w-]+)',
+    re.IGNORECASE
+)
+
 def main(inputBlob: func.InputStream, outputBlob: func.Out[str]) -> None:
     try:
         logging.info(f"Triggered by blob: {inputBlob.name}, size: {inputBlob.length} bytes")
 
-        # Read the PDF content
+        # 1. Extract the PDF text
         pdf_data = inputBlob.read()
-
-        # Extract text from the PDF
         text = extract_text(io.BytesIO(pdf_data))
 
-        # Try to find an order number (Order No, Order Number, PO Number, SO Number…)
-        order_patterns = [
-            r'order\s*(?:number|no)\s*[:#]?\s*([A-Za-z0-9\-]+)',
-            r'po\s*(?:number|no)\s*[:#]?\s*([A-Za-z0-9\-]+)',
-            r'so\s*(?:number|no)\s*[:#]?\s*([A-Za-z0-9\-]+)'
-        ]
-        order_number = "Not Found"
-        for pat in order_patterns:
-            match = re.search(pat, text, re.IGNORECASE)
-            if match:
-                order_number = match.group(1)
-                break
+        # 2. Look for an order/PO/SO number
+        m = _ORDER_RE.search(text or "")
+        order_number = m.group(1) if m else "Not Found"
 
-        # Build the JSON result
+        # 3. Build your output record
         result = {
             "file": inputBlob.name,
             "size": inputBlob.length,
@@ -36,10 +31,11 @@ def main(inputBlob: func.InputStream, outputBlob: func.Out[str]) -> None:
             "text": text
         }
 
-        # Write to the output blob
+        # 4. Write it back out
         outputBlob.set(json.dumps(result))
-        logging.info(f"Successfully wrote JSON for: {inputBlob.name} with OrderNumber={order_number}")
+        logging.info(f"Successfully wrote JSON for: {inputBlob.name} (orderNumber={order_number})")
 
     except Exception as e:
         logging.error(f"Error processing {inputBlob.name}: {e}", exc_info=True)
+        # re-throw so Azure Functions marks the invocation as failed
         raise
