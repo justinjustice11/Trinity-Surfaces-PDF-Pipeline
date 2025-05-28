@@ -5,68 +5,72 @@ import re
 from pdfminer.high_level import extract_text
 import azure.functions as func
 
-# PO/SO regex: captures “PO” or “SO” (with or without dots) and the following alpha‐num value
-ORDER_RE = re.compile(
-    r'\b((?:P\.?O|S\.?O))\s*(?:Number)?[:\s]*([A-Za-z0-9-]+)',
-    re.IGNORECASE
-)
-
-# Confirmation regex: captures “Confirmation” (with optional “Number”) and the following alpha‐num value
-CONF_RE = re.compile(
-    r'\bConfirmation\s*(?:Number)?[:\s]*([A-Za-z0-9-]+)',
-    re.IGNORECASE
-)
+def extract_with_patterns(text: str, patterns: list, default="Not Found") -> str:
+    """
+    Try each (regex, name) in patterns against text;
+    return first capture group or default.
+    """
+    for regex, _ in patterns:
+        m = re.search(regex, text, re.IGNORECASE | re.DOTALL)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+    return default
 
 def main(inputBlob: func.InputStream, outputBlob: func.Out[str]) -> None:
     try:
-        logging.info(f"Triggered by blob: {inputBlob.name}, size: {inputBlob.length} bytes")
+        logging.info(f"Triggered by blob: {inputBlob.name} ({inputBlob.length} bytes)")
 
-        # extract raw text
-        pdf_data = inputBlob.read()
-        text = extract_text(io.BytesIO(pdf_data)) or ""
+        # 1) read & OCR
+        pdf_bytes = inputBlob.read()
+        text = extract_text(io.BytesIO(pdf_bytes))
 
-        # find order (PO/SO)
-        m_order = ORDER_RE.search(text)
-        if m_order:
-            raw_type, raw_num = m_order.group(1), m_order.group(2)
-            order_type = raw_type.replace(".", "").upper()   # “PO” or “SO”
-            order_number = raw_num
-        else:
-            order_type = "Not Found"
-            order_number = ""
+        # 2) extract fields with fallbacks
+        vendor = extract_with_patterns(text, [
+            (r"^([^\r\n]{3,100})", "vendor")
+        ])
 
-        # find confirmation #
-        m_conf = CONF_RE.search(text)
-        if m_conf:
-            conf_number = m_conf.group(1)
-            conf_type = "Confirmation"
-        else:
-            conf_type = "Not Found"
-            conf_number = ""
+        ship_to = extract_with_patterns(text, [
+            (r"SHIP TO:\s*\n(.+?)\n", "shipTo"),
+            (r"Ship to Address\s*\n(.+?)\n", "shipTo")
+        ])
 
-        # build JSON result
+        order_number = extract_with_patterns(text, [
+            (r"\bPO[#:\s]+(\d+)\b", "orderNumber"),
+            (r"Sales Order\D*(\d+)\b", "orderNumber"),
+            (r"Order\s+#?\s*(\d+)\b", "orderNumber")
+        ])
+
+        order_date = extract_with_patterns(text, [
+            (r"Order Date\D*([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})", "orderDate"),
+            (r"DATED\s*([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})", "orderDate")
+        ])
+
+        currency = extract_with_patterns(text, [
+            (r"Currency\s*\n\s*([A-Z]{3})", "currency"),
+            (r"\b(USD|EUR|CAD)\b", "currency")
+        ])
+
+        # 3) assemble result
         result = {
             "file": inputBlob.name,
             "size": inputBlob.length,
+            "vendor": vendor,
+            "shipTo": ship_to,
             "orderNumber": order_number,
-            "orderType": order_type,
-            "confirmationNumber": conf_number,
-            "confirmationType": conf_type,
+            "orderDate": order_date,
+            "currency": currency,
             "text": text
         }
 
-        outputBlob.set(json.dumps(result, ensure_ascii=False))
-        logging.info(
-            f"Wrote JSON for {inputBlob.name} (orderType={order_type}, orderNumber={order_number}, "
-            f"confType={conf_type}, confNumber={conf_number})"
-        )
+        outputBlob.set(json.dumps(result))
+        logging.info(f"Wrote JSON for {inputBlob.name}")
 
-    except Exception as e:
-        logging.error(f"Error processing {inputBlob.name}: {e}", exc_info=True)
-        # write out a JSON stub so you can inspect failures later:
+    except Exception as ex:
+        logging.error(f"Failed {inputBlob.name}: {ex}", exc_info=True)
+        # emit minimal JSON so trigger doesn't poison-queue forever
         outputBlob.set(json.dumps({
             "file": inputBlob.name,
-            "error": str(e)
+            "size": inputBlob.length,
+            "error": str(ex)
         }))
-        # do NOT re-raise
-
+        raise
