@@ -5,72 +5,81 @@ import re
 from pdfminer.high_level import extract_text
 import azure.functions as func
 
-def extract_with_patterns(text: str, patterns: list, default="Not Found") -> str:
+def extract_field(text: str, patterns: list, default: str = "Not Found") -> str:
     """
-    Try each (regex, name) in patterns against text;
-    return first capture group or default.
+    Try each regex pattern in order, return first capturing group's value, or default.
     """
-    for regex, _ in patterns:
-        m = re.search(regex, text, re.IGNORECASE | re.DOTALL)
-        if m and m.group(1).strip():
-            return m.group(1).strip()
+    for pat in patterns:
+        match = re.search(pat, text, re.IGNORECASE)
+        if match and match.group(1).strip():
+            return match.group(1).strip()
     return default
+
 
 def main(inputBlob: func.InputStream, outputBlob: func.Out[str]) -> None:
     try:
         logging.info(f"Triggered by blob: {inputBlob.name} ({inputBlob.length} bytes)")
 
-        # 1) read & OCR
+        # Extract text from PDF
         pdf_bytes = inputBlob.read()
-        text = extract_text(io.BytesIO(pdf_bytes))
+        raw_text = extract_text(io.BytesIO(pdf_bytes)) or ""
+        # normalize whitespace for easier regex
+        text = re.sub(r"\s+", " ", raw_text)
 
-        # 2) extract fields with fallbacks
-        vendor = extract_with_patterns(text, [
-            (r"^([^\r\n]{3,100})", "vendor")
-        ])
+        # Patterns for PO, SO, and Confirmation
+        po_patterns = [
+            r"\bPO[#:\s-]*([A-Za-z0-9\-]+)\b",
+            r"\bPurchase Order[#:\s-]*([A-Za-z0-9\-]+)\b"
+        ]
+        so_patterns = [
+            r"\bSO[#:\s-]*([A-Za-z0-9\-]+)\b",
+            r"\bSales Order[#:\s-]*([A-Za-z0-9\-]+)\b"
+        ]
+        conf_patterns = [
+            r"\bOrder Confirmation[#:\s-]*([A-Za-z0-9\-]+)\b",
+            r"\bConfirmation[#:\s-]*([A-Za-z0-9\-]+)\b"
+        ]
 
-        ship_to = extract_with_patterns(text, [
-            (r"SHIP TO:\s*\n(.+?)\n", "shipTo"),
-            (r"Ship to Address\s*\n(.+?)\n", "shipTo")
-        ])
+        # Extract fields
+        po_num = extract_field(text, po_patterns)
+        so_num = extract_field(text, so_patterns)
+        conf_num = extract_field(text, conf_patterns)
 
-        order_number = extract_with_patterns(text, [
-            (r"\bPO[#:\s]+(\d+)\b", "orderNumber"),
-            (r"Sales Order\D*(\d+)\b", "orderNumber"),
-            (r"Order\s+#?\s*(\d+)\b", "orderNumber")
-        ])
+        # Determine order number and type
+        if so_num != "Not Found":
+            order_number = so_num
+            order_type = "SO"
+        elif po_num != "Not Found":
+            order_number = po_num
+            order_type = "PO"
+        else:
+            order_number = "Not Found"
+            order_type = "Not Found"
 
-        order_date = extract_with_patterns(text, [
-            (r"Order Date\D*([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})", "orderDate"),
-            (r"DATED\s*([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})", "orderDate")
-        ])
+        # Confirmation
+        confirmation_number = conf_num
+        confirmation_type = "PO Confirmation" if conf_num != "Not Found" else "Not Found"
 
-        currency = extract_with_patterns(text, [
-            (r"Currency\s*\n\s*([A-Z]{3})", "currency"),
-            (r"\b(USD|EUR|CAD)\b", "currency")
-        ])
-
-        # 3) assemble result
+        # Assemble JSON result
         result = {
             "file": inputBlob.name,
             "size": inputBlob.length,
-            "vendor": vendor,
-            "shipTo": ship_to,
             "orderNumber": order_number,
-            "orderDate": order_date,
-            "currency": currency,
-            "text": text
+            "orderType": order_type,
+            "confirmationNumber": confirmation_number,
+            "confirmationType": confirmation_type,
+            "text": raw_text
         }
 
         outputBlob.set(json.dumps(result))
-        logging.info(f"Wrote JSON for {inputBlob.name}")
+        logging.info(f"Successfully wrote JSON for: {inputBlob.name}")
 
     except Exception as ex:
-        logging.error(f"Failed {inputBlob.name}: {ex}", exc_info=True)
-        # emit minimal JSON so trigger doesn't poison-queue forever
-        outputBlob.set(json.dumps({
+        logging.error(f"Error processing {inputBlob.name}: {ex}", exc_info=True)
+        fallback = {
             "file": inputBlob.name,
             "size": inputBlob.length,
             "error": str(ex)
-        }))
+        }
+        outputBlob.set(json.dumps(fallback))
         raise
