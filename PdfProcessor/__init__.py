@@ -63,4 +63,10 @@ def main(inputBlob: func.InputStream, outputBlob: func.Out[str]) -> None:
 
     except Exception as e:
         logging.error(f"Error processing {inputBlob.name}: {e}", exc_info=True)
-        raise
+        # write out a JSON stub so you can inspect failures later:
+        outputBlob.set(json.dumps({
+            "file": inputBlob.name,
+            "error": str(e)
+        }))
+        # do NOT re-raise
+
