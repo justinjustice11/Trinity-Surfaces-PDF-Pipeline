@@ -9,7 +9,7 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 import azure.functions as func
 
-def main(inputBlob: func.InputStream, outputBlob: func.Out[str]) -> None:
+def main(inputBlob: func.InputStream, outputBlob: func.Out[str], queueOutput: func.Out[str]) -> None:
     try:
         logging.info(f"Triggered by blob: {inputBlob.name}, size: {inputBlob.length} bytes")
 
@@ -49,11 +49,16 @@ def main(inputBlob: func.InputStream, outputBlob: func.Out[str]) -> None:
             "confirmationNumber": conf_number.group(1) if conf_number else "Not Found",
             "confirmationType": conf_type.group(1) if conf_type else "Not Found",
             "text": text or "No text extracted",
-            "formFields": form_fields  # ⬅️ Appended Form Recognizer fields here
+            "formFields": form_fields
         }
 
+        # Write to Blob
         outputBlob.set(json.dumps(result_payload))
-        logging.info(f"Successfully wrote JSON for: {inputBlob.name}")
+
+        # ✅ Send to queue for flattening
+        queueOutput.set(json.dumps(result_payload))
+
+        logging.info(f"Successfully wrote JSON and queued result for: {inputBlob.name}")
 
     except Exception as e:
         logging.exception(f"Error processing blob {inputBlob.name}: {str(e)}")
