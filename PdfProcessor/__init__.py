@@ -59,6 +59,7 @@ def main(inputBlob: func.InputStream, outputBlob: func.Out[str], queueOutput: fu
         queueOutput.set(json.dumps(result_payload))
 
         logging.info(f"Successfully wrote JSON and queued result for: {inputBlob.name}")
+        logging.warning("✔ PdfProcessor trigger started.")
 
     except Exception as e:
         logging.exception(f"Error processing blob {inputBlob.name}: {str(e)}")

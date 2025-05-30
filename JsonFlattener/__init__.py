@@ -21,6 +21,9 @@ def main(msg: func.QueueMessage) -> None:
         logging.info("Flattened record written to Cosmos DB.")
     except Exception as e:
         logging.error(f"Failed to write to Cosmos: {e}")
+        logging.warning("📥 Queue message received")
+        logging.warning(f"Message content: {msg.get_body().decode('utf-8')}")
+
 
 def flatten_json(record):
     flat = {
