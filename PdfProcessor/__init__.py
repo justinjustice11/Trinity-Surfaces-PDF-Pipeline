@@ -1,3 +1,4 @@
+# PdfProcessor/__init__.py
 import logging
 import json
 import io
@@ -55,11 +56,10 @@ def main(inputBlob: func.InputStream, outputBlob: func.Out[str], queueOutput: fu
         # Write to Blob
         outputBlob.set(json.dumps(result_payload))
 
-        # ✅ Send to queue for flattening
+        # Send to queue for flattening
         queueOutput.set(json.dumps(result_payload))
 
         logging.info(f"Successfully wrote JSON and queued result for: {inputBlob.name}")
-        logging.warning("✔ PdfProcessor trigger started.")
 
     except Exception as e:
         logging.exception(f"Error processing blob {inputBlob.name}: {str(e)}")
