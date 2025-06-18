@@ -29,7 +29,7 @@ def main(inputBlob: func.InputStream, outputBlob: func.Out[str], queueOutput: fu
             poller = form_client.begin_analyze_document("prebuilt-document", document=io.BytesIO(pdf_bytes))
             result = poller.result()
         except Exception as fr_error:
-            logging.error(f"Form Recognizer API call failed: {fr_error}")
+            logging.error(f"Form Recognizer API call failed: {type(fr_error).__name__}: {fr_error}")
             raise
 
         # Extract key-value pairs
@@ -53,5 +53,5 @@ def main(inputBlob: func.InputStream, outputBlob: func.Out[str], queueOutput: fu
         logging.info(f"Successfully processed and queued: {inputBlob.name}")
 
     except Exception as e:
-        logging.exception(f"Error processing blob {inputBlob.name}: {e}")
+        logging.exception(f"Unhandled error in PdfProcessor: {type(e).__name__}: {e}")
         raise
