@@ -1,18 +1,38 @@
-import pandas as pd
+import logging
+import json
+import os
+import azure.functions as func
+from azure.cosmos import CosmosClient
 
-# Load every sheet into a dict, auto-detecting their real names
-sheets = pd.read_excel('ChatGPTRandom.xlsx', sheet_name=None)
+def main(msg: func.QueueMessage) -> None:
+    try:
+        logging.info("JsonFlattener function triggered.")
+        
+        body = msg.get_body().decode('utf-8')
+        logging.info(f"Received message body: {body}")
+        data = json.loads(body)
 
-# Print out what pandas thinks the sheet names are
-print("Detected sheets:", list(sheets.keys()))
+        # Read from environment
+        cosmos_endpoint = os.getenv("COSMOS_ENDPOINT")
+        cosmos_key = os.getenv("COSMOS_KEY")
 
-# (Then, for example:)
-quotes_df       = sheets['Quotes']            # or whatever the exact key turns out to be
-samples_df      = sheets['Samples by rep']   # <-- note trailing space?
-sales_df        = sheets['Sales and profits']
-opps_df         = sheets['OpporOpportunities- branch and datetunities']
+        if not cosmos_endpoint or not cosmos_key:
+            raise ValueError("Missing Cosmos DB endpoint or key.")
 
-# From there you can parse each one’s date & value columns,
-# aggregate monthly, plot quotes vs. sales vs. opportunities vs. samples,
-# and compute correlations to see which pipeline metric best (and worst)
-# predicts actual sales.
+        client = CosmosClient(cosmos_endpoint, credential=cosmos_key)
+        db = client.get_database_client("PdfDataDB")
+        container = db.get_container_client("FlattenedOrders")
+
+        # Create a simple document
+        doc = {
+            "id": data.get("file", "unknown.pdf"),
+            "fields": data.get("formFields", {}),
+            "source": "JsonFlattener"
+        }
+
+        container.upsert_item(doc)
+        logging.info(f"Document {doc['id']} successfully written to Cosmos DB.")
+
+    except Exception as e:
+        logging.exception(f"JsonFlattener failed with {type(e).__name__}: {e}")
+        raise
