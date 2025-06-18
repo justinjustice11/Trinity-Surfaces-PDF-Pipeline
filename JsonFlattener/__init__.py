@@ -1,39 +1,18 @@
-# JsonFlattener/__init__.py
-import logging
-import os
-import json
-import azure.functions as func
-from azure.cosmos import CosmosClient
+import pandas as pd
 
-def main(msg: func.QueueMessage) -> None:
-    try:
-        data = json.loads(msg.get_body().decode("utf-8"))
-        flat = flatten_json(data)
+# Load every sheet into a dict, auto-detecting their real names
+sheets = pd.read_excel('ChatGPTRandom.xlsx', sheet_name=None)
 
-        # Connect to Cosmos DB
-        endpoint = os.getenv("COSMOS_ENDPOINT")
-        key = os.getenv("COSMOS_KEY")
-        client = CosmosClient(endpoint, key)
-        db = client.get_database_client("PdfDataDB")
-        container = db.get_container_client("FlattenedOrders")
+# Print out what pandas thinks the sheet names are
+print("Detected sheets:", list(sheets.keys()))
 
-        container.create_item(flat)
+# (Then, for example:)
+quotes_df       = sheets['Quotes']            # or whatever the exact key turns out to be
+samples_df      = sheets['Samples by rep']   # <-- note trailing space?
+sales_df        = sheets['Sales and profits']
+opps_df         = sheets['OpporOpportunities- branch and datetunities']
 
-        logging.info("Flattened record written to Cosmos DB.")
-    except Exception as e:
-        logging.error(f"Failed to write to Cosmos: {e}")
-        logging.warning("\ud83d\udce5 Queue message received")
-        logging.warning(f"Message content: {msg.get_body().decode('utf-8')}")
-
-def flatten_json(record):
-    flat = {
-        "id": record.get("file", "").replace("pdfupload/", "").replace(".pdf", ""),
-        "file": record.get("file"),
-        "orderNumber": record.get("orderNumber"),
-        "orderType": record.get("orderType"),
-        "confirmationNumber": record.get("confirmationNumber"),
-        "confirmationType": record.get("confirmationType"),
-    }
-    if "formFields" in record:
-        flat.update(record["formFields"])
-    return flat
+# From there you can parse each one’s date & value columns,
+# aggregate monthly, plot quotes vs. sales vs. opportunities vs. samples,
+# and compute correlations to see which pipeline metric best (and worst)
+# predicts actual sales.
